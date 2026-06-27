@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { mockPosts } from '@/lib/mock-db';
 import { Post } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 // Let's keep a mutable copy in memory for mock updates (creates)
 const postsStore: Post[] = [...mockPosts];
 
