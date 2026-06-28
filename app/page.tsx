@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query';
-import { apiService } from '@/services/api';
+import { getPostsServer } from '@/lib/posts-server';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { BlogHome } from '@/components/ui/BlogHome';
@@ -19,7 +19,7 @@ export default async function Home({ searchParams }: PageProps) {
 
   const queryClient = new QueryClient();
 
-  // Prefetch main posts grid
+  // Prefetch main posts grid using direct server call (bypass network)
   const postsParams = {
     category: category !== 'All' ? category : undefined,
     search: search || undefined,
@@ -28,17 +28,17 @@ export default async function Home({ searchParams }: PageProps) {
   };
   await queryClient.prefetchQuery({
     queryKey: ['posts', postsParams],
-    queryFn: () => apiService.getPosts(postsParams),
+    queryFn: () => getPostsServer(postsParams),
   });
 
-  // Prefetch sidebar popular posts
+  // Prefetch sidebar popular posts using direct server call (bypass network)
   const popularParams = {
     limit: 3,
     sortBy: 'views',
   };
   await queryClient.prefetchQuery({
     queryKey: ['posts', popularParams],
-    queryFn: () => apiService.getPosts(popularParams),
+    queryFn: () => getPostsServer(popularParams),
   });
 
   return (
