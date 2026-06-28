@@ -142,16 +142,7 @@ function LoginForm() {
           </button>
         </form>
 
-        {/* Test Credentials Helper Hint */}
-        <div className="mt-8 border-t border-slate-100 dark:border-slate-800 pt-6">
-          <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200/50 dark:border-slate-800/50 text-xs">
-            <span className="font-bold text-slate-800 dark:text-slate-200">Demo Account Credentials:</span>
-            <div className="mt-1.5 space-y-1 font-mono text-slate-500 dark:text-slate-400">
-              <div>Email: <span className="text-indigo-600 dark:text-indigo-400 font-semibold select-all">admin@techtalks.com</span></div>
-              <div>Pass: <span className="text-indigo-600 dark:text-indigo-400 font-semibold select-all">password123</span></div>
-            </div>
-          </div>
-        </div>
+
 
       </div>
     </div>
