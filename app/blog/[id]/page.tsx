@@ -3,7 +3,7 @@ import { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { mockPosts } from '@/lib/mock-db';
+import { getPostsServer, getPostServer } from '@/lib/posts-server';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { CategoryBadge } from '@/components/ui/CategoryBadge';
@@ -24,70 +24,85 @@ interface PageProps {
 // Generate dynamic metadata for SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
-  const post = mockPosts.find((p) => p.id === id);
-
-  if (!post) {
+  try {
+    const post = await getPostServer(id);
+    return {
+      title: `${post.title} | TechTalks`,
+      description: post.description,
+      keywords: post.tags,
+      openGraph: {
+        title: post.title,
+        description: post.description,
+        images: [{ url: post.coverImage, width: 1200, height: 630, alt: post.title }],
+        type: 'article',
+        publishedTime: post.createdAt,
+        authors: [post.author],
+        tags: post.tags,
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: post.title,
+        description: post.description,
+        images: [post.coverImage],
+      },
+      alternates: {
+        canonical: `/blog/${post.id}`,
+      },
+    };
+  } catch (error) {
     return {
       title: 'Article Not Found | TechTalks',
       description: 'The requested blog post could not be found.',
     };
   }
-
-  return {
-    title: `${post.title} | TechTalks`,
-    description: post.description,
-    keywords: post.tags,
-    openGraph: {
-      title: post.title,
-      description: post.description,
-      images: [{ url: post.coverImage, width: 1200, height: 630, alt: post.title }],
-      type: 'article',
-      publishedTime: post.createdAt,
-      authors: [post.author],
-      tags: post.tags,
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: post.title,
-      description: post.description,
-      images: [post.coverImage],
-    },
-    alternates: {
-      canonical: `/blog/${post.id}`,
-    },
-  };
 }
 
 // Support Static Generation paths (pre-render all posts)
 export async function generateStaticParams() {
-  return mockPosts.map((post) => ({
-    id: post.id,
-  }));
+  try {
+    const { posts } = await getPostsServer({ limit: 100 });
+    return posts.map((post) => ({
+      id: post.id,
+    }));
+  } catch (error) {
+    console.error('Failed to generate static params:', error);
+    return [];
+  }
 }
 
 export default async function BlogDetail({ params }: PageProps) {
   const { id } = await params;
-  const postIndex = mockPosts.findIndex((p) => p.id === id);
+  
+  let allPosts;
+  try {
+    const result = await getPostsServer({ limit: 100 });
+    allPosts = result.posts;
+  } catch (error) {
+    console.error('Failed to load posts list:', error);
+    notFound();
+  }
+
+  const postIndex = allPosts.findIndex((p) => p.id === id);
 
   if (postIndex === -1) {
     notFound();
   }
 
-  const post = mockPosts[postIndex];
+  const post = allPosts[postIndex];
 
   // Retrieve Previous and Next posts
-  const prevPost = postIndex > 0 ? mockPosts[postIndex - 1] : null;
-  const nextPost = postIndex < mockPosts.length - 1 ? mockPosts[postIndex + 1] : null;
+  const prevPost = postIndex > 0 ? allPosts[postIndex - 1] : null;
+  const nextPost = postIndex < allPosts.length - 1 ? allPosts[postIndex + 1] : null;
 
   // Retrieve Related posts (same category, excluding current post, max 3)
-  const relatedPosts = mockPosts
+  const relatedPosts = allPosts
     .filter((p) => p.category === post.category && p.id !== post.id)
     .slice(0, 3);
 
   // Fallback related posts (if none in same category, just take other recent posts)
   const finalRelatedPosts = relatedPosts.length > 0 
     ? relatedPosts 
-    : mockPosts.filter((p) => p.id !== post.id).slice(0, 3);
+    : allPosts.filter((p) => p.id !== post.id).slice(0, 3);
 
   const siteUrl = process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 

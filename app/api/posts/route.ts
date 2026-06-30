@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const order = searchParams.get('order') || 'desc';
 
-    const result = getPostsServer({
+    const result = await getPostsServer({
       search,
       category,
       tag,
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const newPost = createPostServer({
+    const newPost = await createPostServer({
       title,
       description,
       content,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mockPosts } from '@/lib/mock-db';
+import { getPostServer } from '@/lib/posts-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,18 +9,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const post = mockPosts.find((p) => p.id === id);
-
-    if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-    }
-
-    // Increment views counter (mock style, since mockPosts is imported)
-    post.views += 1;
+    const post = await getPostServer(id);
 
     return NextResponse.json(post);
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Failed to fetch post' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to fetch post' }, { status: 404 });
   }
 }

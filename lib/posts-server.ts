@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { mockPosts } from './mock-db';
 import { Post } from '@/types';
 
@@ -7,6 +8,58 @@ if (!globalRef.postsStore) {
   globalRef.postsStore = [...mockPosts];
 }
 export const postsStore = globalRef.postsStore;
+
+const MOCK_API_URL = process.env.MOCK_API_URL;
+
+async function fetchPostsFromMockAPI(): Promise<Post[]> {
+  if (!MOCK_API_URL) {
+    console.warn('WARNING: MOCK_API_URL environment variable is not defined. Falling back to local mock database.');
+    return postsStore;
+  }
+
+  try {
+    const { data } = await axios.get<Post[]>(MOCK_API_URL, { timeout: 8000 });
+    
+    // Self-seeding: If MockAPI is reachable but empty, seed it with initial mockPosts
+    if (Array.isArray(data) && data.length === 0) {
+      console.log('MockAPI database is empty. Seeding initial posts...');
+      const seededPosts: Post[] = [];
+      // We process them sequentially to avoid MockAPI rate limits and preserve insertion order
+      for (const post of mockPosts) {
+        try {
+          // Exclude the ID when creating new entries so MockAPI auto-generates sequential/unique IDs
+          const { id, ...postPayload } = post;
+          const { data: createdPost } = await axios.post<Post>(MOCK_API_URL, postPayload);
+          seededPosts.push(createdPost);
+        } catch (postErr: any) {
+          console.error(`Failed to seed post "${post.title}":`, postErr.message);
+        }
+      }
+      if (seededPosts.length > 0) {
+        // Sync local memory store with seeded database
+        postsStore.length = 0;
+        postsStore.push(...seededPosts);
+        return postsStore;
+      }
+    }
+    
+    if (Array.isArray(data)) {
+      // Sync local memory store with MockAPI data
+      postsStore.length = 0;
+      postsStore.push(...data);
+      return postsStore;
+    }
+    
+    return postsStore;
+  } catch (error: any) {
+    console.warn(
+      `WARNING: Failed to fetch posts from MockAPI (${error.message}). ` +
+      `Please ensure you have created the "posts" resource at your MockAPI project dashboard. ` +
+      `Falling back to local in-memory database.`
+    );
+    return postsStore;
+  }
+}
 
 export interface GetPostsParams {
   category?: string;
@@ -18,7 +71,7 @@ export interface GetPostsParams {
   order?: string;
 }
 
-export function getPostsServer(params: GetPostsParams = {}) {
+export async function getPostsServer(params: GetPostsParams = {}) {
   const {
     category = '',
     search = '',
@@ -29,7 +82,9 @@ export function getPostsServer(params: GetPostsParams = {}) {
     order = 'desc',
   } = params;
 
-  let filteredPosts = [...postsStore];
+  // Retrieve current active posts (from MockAPI or local fallback)
+  const activePosts = await fetchPostsFromMockAPI();
+  let filteredPosts = [...activePosts];
 
   // Filter by search query and calculate relevance scores
   const relevanceScores: Record<string, number> = {};
@@ -110,9 +165,9 @@ export function getPostsServer(params: GetPostsParams = {}) {
 
     let comparison = 0;
     if (sortBy === 'views') {
-      comparison = a.views - b.views;
+      comparison = (a.views || 0) - (b.views || 0);
     } else if (sortBy === 'likes') {
-      comparison = a.likes - b.likes;
+      comparison = (a.likes || 0) - (b.likes || 0);
     } else {
       comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     }
@@ -135,9 +190,8 @@ export function getPostsServer(params: GetPostsParams = {}) {
   };
 }
 
-export function createPostServer(postData: Partial<Post>) {
-  const newPost: Post = {
-    id: String(postsStore.length + 1),
+export async function createPostServer(postData: Partial<Post>): Promise<Post> {
+  const newPost = {
     title: postData.title || 'Untitled',
     description: postData.description || '',
     content: postData.content || '',
@@ -152,6 +206,49 @@ export function createPostServer(postData: Partial<Post>) {
     likes: 0,
     featured: false,
   };
-  postsStore.unshift(newPost);
-  return newPost;
+
+  if (MOCK_API_URL) {
+    try {
+      const { data } = await axios.post<Post>(MOCK_API_URL, newPost);
+      postsStore.unshift(data);
+      return data;
+    } catch (error: any) {
+      console.error('Failed to create post on MockAPI:', error.message);
+    }
+  }
+
+  // Fallback when MockAPI is not active/fails
+  const fallbackPost: Post = {
+    ...newPost,
+    id: String(postsStore.length + 1),
+  };
+  postsStore.unshift(fallbackPost);
+  return fallbackPost;
+}
+
+export async function getPostServer(id: string): Promise<Post> {
+  if (MOCK_API_URL) {
+    try {
+      const { data: post } = await axios.get<Post>(`${MOCK_API_URL}/${id}`);
+      
+      // Increment views count and save back to MockAPI (asynchronous background operation)
+      const updatedViews = (post.views || 0) + 1;
+      axios.put(`${MOCK_API_URL}/${id}`, { views: updatedViews }).catch((putErr) => {
+        console.error(`Failed to update views count for post ${id}:`, putErr.message);
+      });
+      
+      post.views = updatedViews;
+      return post;
+    } catch (error: any) {
+      console.warn(`Failed to fetch post ${id} from MockAPI (${error.message}). Falling back to local store.`);
+    }
+  }
+
+  // Local fallback
+  const localPost = postsStore.find((p) => p.id === id);
+  if (!localPost) {
+    throw new Error('Post not found');
+  }
+  localPost.views += 1;
+  return localPost;
 }
